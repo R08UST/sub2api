@@ -73,6 +73,19 @@ const DefaultCacheControlTTL = "5m"
 // patch 版本即被视为异常 fingerprint,有被判第三方的风险。
 const CLICurrentVersion = "2.1.161"
 
+// ClientPlatformCLI 是真实 Claude Code CLI 在 anthropic-client-platform header 中
+// 发送的值。来自 CC 二进制中 tqH() 函数的反编译:
+//
+//	switch(process.env.CLAUDE_CODE_ENTRYPOINT){
+//	  case "claude-vscode": return "claude_code_vscode"
+//	  case "remote"/"remote_baku"/"remote_desktop"/"remote_mobile": return "claude_code_remote"
+//	  default: return "claude_code_cli"
+//	}
+//
+// Anthropic 上游会基于这个 header 判定客户端来源。OAuth 订阅账号的 token 是为 Claude Code
+// 颁发的,缺少这个 header 或值不对会被识别为第三方调用。
+const ClientPlatformCLI = "claude_code_cli"
+
 // FullClaudeCodeMimicryBetas 返回最"像"真实 Claude Code CLI 的完整 beta 列表，
 // 用于 OAuth 账号伪装成 Claude Code 时使用。
 // 顺序与真实 CLI 抓包一致。
@@ -116,6 +129,7 @@ var DefaultHeaders = map[string]string{
 	"X-Stainless-Timeout":                       "600",
 	"X-App":                                     "cli",
 	"Anthropic-Dangerous-Direct-Browser-Access": "true",
+	"anthropic-client-platform":                 ClientPlatformCLI,
 }
 
 // init 根据 sub2api 实际运行的宿主机 OS/Arch 覆盖 X-Stainless-OS 和 X-Stainless-Arch。
