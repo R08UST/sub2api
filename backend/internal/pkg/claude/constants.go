@@ -1,11 +1,13 @@
 // Package claude provides constants and helpers for Claude API integration.
 package claude
 
+import "runtime"
+
 // Claude Code 客户端相关常量
 
 // Beta header 常量
 //
-// 这里的常量对齐真实 Claude Code CLI 的最新流量（截至 2026-04）。
+// 这里的常量对齐真实 Claude Code CLI 的最新流量（截至 2026-05）。
 // 选型参考：与 Parrot (src/transform/cc_mimicry.py) 的 BETAS 保持一致，
 // 原因：Anthropic 上游会基于 anthropic-beta 的完整集合判定请求来源；
 // 缺少任何"官方 Claude Code 请求才会带"的 beta，都会被降级到第三方额度，
@@ -65,6 +67,10 @@ const DefaultCacheControlTTL = "5m"
 // CLICurrentVersion 是 sub2api 当前对外伪装的 Claude Code CLI 版本号（三段 semver）。
 // 用于 billing attribution block 中的 cc_version=X.Y.Z.{fp} 前缀以及 fingerprint 计算。
 // 必须与 DefaultHeaders["User-Agent"] 中的版本号严格一致；不一致会被 Anthropic 判第三方。
+//
+// 维护提示：每次 @anthropic-ai/claude-code 在 npm 发布新版,本常量应在数日内对齐。
+// 当前值 2.1.161 对齐上游 feat(claude-mimicry) 的最新发布;落后超过 ~20 个
+// patch 版本即被视为异常 fingerprint,有被判第三方的风险。
 const CLICurrentVersion = "2.1.161"
 
 // FullClaudeCodeMimicryBetas 返回最"像"真实 Claude Code CLI 的完整 beta 列表，
@@ -89,6 +95,12 @@ func FullClaudeCodeMimicryBetas() []string {
 }
 
 // DefaultHeaders 是 Claude Code 客户端默认请求头。
+//
+// 注意:X-Stainless-OS / X-Stainless-Arch 的默认值在 init() 中根据 sub2api 进程
+// 实际运行的环境覆盖。原因:真实 Claude Code 的 X-Stainless-OS/Arch 来自 Node.js
+// 的 process.platform / process.arch,反映客户端真实运行环境。如果 sub2api 在
+// Linux x86_64 服务器上对外发出 "Linux + arm64" 的指纹(arm64 是早期硬编码值),
+// 上游可以通过 TLS 指纹 vs Stainless-Arch 的矛盾识别为中转流量。
 var DefaultHeaders = map[string]string{
 	// Keep these in sync with recent Claude CLI traffic to reduce the chance
 	// that Claude Code-scoped OAuth credentials are rejected as "non-CLI" usage.
@@ -96,14 +108,41 @@ var DefaultHeaders = map[string]string{
 	"User-Agent":                                "claude-cli/" + CLICurrentVersion + " (external, cli)",
 	"X-Stainless-Lang":                          "js",
 	"X-Stainless-Package-Version":               "0.94.0",
-	"X-Stainless-OS":                            "Linux",
-	"X-Stainless-Arch":                          "arm64",
+	"X-Stainless-OS":                            "Linux", // 由 init() 覆盖
+	"X-Stainless-Arch":                          "x64",   // 由 init() 覆盖
 	"X-Stainless-Runtime":                       "node",
 	"X-Stainless-Runtime-Version":               "v24.3.0",
 	"X-Stainless-Retry-Count":                   "0",
 	"X-Stainless-Timeout":                       "600",
 	"X-App":                                     "cli",
 	"Anthropic-Dangerous-Direct-Browser-Access": "true",
+}
+
+// init 根据 sub2api 实际运行的宿主机 OS/Arch 覆盖 X-Stainless-OS 和 X-Stainless-Arch。
+// 映射规则参考 OpenAI Node.js SDK 的 Stainless 约定:
+//   - GOOS:    linux→Linux, darwin→MacOS, windows→Windows
+//   - GOARCH:  amd64→x64,   arm64→arm64,  386→x86, riscv64→other
+func init() {
+	switch runtime.GOOS {
+	case "linux":
+		DefaultHeaders["X-Stainless-OS"] = "Linux"
+	case "darwin":
+		DefaultHeaders["X-Stainless-OS"] = "MacOS"
+	case "windows":
+		DefaultHeaders["X-Stainless-OS"] = "Windows"
+	default:
+		DefaultHeaders["X-Stainless-OS"] = "Unknown"
+	}
+	switch runtime.GOARCH {
+	case "amd64":
+		DefaultHeaders["X-Stainless-Arch"] = "x64"
+	case "arm64":
+		DefaultHeaders["X-Stainless-Arch"] = "arm64"
+	case "386":
+		DefaultHeaders["X-Stainless-Arch"] = "x86"
+	default:
+		DefaultHeaders["X-Stainless-Arch"] = "other"
+	}
 }
 
 // Model 表示一个 Claude 模型

@@ -7022,6 +7022,18 @@ func applyClaudeCodeMimicHeaders(req *http.Request, isStream bool) {
 		}
 		setHeaderRaw(req.Header, resolveWireCasing(key), value)
 	}
+	// X-Stainless-Retry-Count 抖动:claude.DefaultHeaders 把它硬编码为 "0",但真实
+	// Claude Code 偶尔会发生 SDK 层重试(网络抖动/429),此时这个值会非 0。如果中转
+	// 流量永远是 0,聚合到上游就是一个能区分"机器人聚合体 vs 真实多人客户端"的弱信号。
+	// 加权随机:90% 0, 8% 1, 2% 2 — 这个分布拟合"罕见但偶发"的真实重试行为。
+	retryCount := "0"
+	switch n := mathrand.Intn(100); {
+	case n >= 98:
+		retryCount = "2"
+	case n >= 90:
+		retryCount = "1"
+	}
+	setHeaderRaw(req.Header, "X-Stainless-Retry-Count", retryCount)
 	// Real Claude CLI uses Accept: application/json (even for streaming).
 	setHeaderRaw(req.Header, "Accept", "application/json")
 	if isStream {

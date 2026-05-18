@@ -25,15 +25,24 @@ var (
 	userAgentVersionRegex = regexp.MustCompile(`/(\d+)\.(\d+)\.(\d+)`)
 )
 
-// 默认指纹值（当客户端未提供时使用）
-var defaultFingerprint = Fingerprint{
-	UserAgent:               "claude-cli/" + claude.CLICurrentVersion + " (external, cli)",
-	StainlessLang:           "js",
-	StainlessPackageVersion: "0.94.0",
-	StainlessOS:             "Linux",
-	StainlessArch:           "arm64",
-	StainlessRuntime:        "node",
-	StainlessRuntimeVersion: "v24.3.0",
+// defaultFingerprint 是首次为账号生成指纹、且客户端未提供任何 X-Stainless-* 头时
+// 使用的回退值。源自 claude.DefaultHeaders(单一真值源)以保证两处定义不漂移。
+//
+// 初始化时机:claude 包的 init() 先运行(根据 GOOS/GOARCH 覆盖 OS/Arch),
+// 再由本文件 init() 从 claude.DefaultHeaders 拷贝值;因此 OS/Arch 始终反映
+// sub2api 实际运行环境,避免 Linux x86 服务器对外宣称 arm64 的矛盾指纹。
+var defaultFingerprint Fingerprint
+
+func init() {
+	defaultFingerprint = Fingerprint{
+		UserAgent:               claude.DefaultHeaders["User-Agent"],
+		StainlessLang:           claude.DefaultHeaders["X-Stainless-Lang"],
+		StainlessPackageVersion: claude.DefaultHeaders["X-Stainless-Package-Version"],
+		StainlessOS:             claude.DefaultHeaders["X-Stainless-OS"],
+		StainlessArch:           claude.DefaultHeaders["X-Stainless-Arch"],
+		StainlessRuntime:        claude.DefaultHeaders["X-Stainless-Runtime"],
+		StainlessRuntimeVersion: claude.DefaultHeaders["X-Stainless-Runtime-Version"],
+	}
 }
 
 // Fingerprint represents account fingerprint data
