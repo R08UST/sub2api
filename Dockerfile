@@ -29,6 +29,12 @@ RUN pnpm install --frozen-lockfile
 
 # Copy frontend source and build
 COPY frontend/ ./
+# vue-tsc + Vite TS compilation can peak around 1.5-2 GB on this codebase.
+# Default Node old-space is ~1.5 GB and will OOM on small build hosts
+# (e.g. 1C2G VPS). Bump to 4 GB to give headroom; the build host needs at
+# least ~2 GB free RAM + swap, otherwise the container will be OOM-killed
+# by the kernel anyway.
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm run build
 
 # -----------------------------------------------------------------------------
